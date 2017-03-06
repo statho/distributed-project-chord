@@ -4,7 +4,7 @@
 -export([start_link/1, insert/2, query/2, 
          delete/2, change_previous/2, change_next/2,
          join/2]).
--export([init/1, handle_cast/2, handle_info/2,
+-export([init/1, handle_cast/2, handle_info/2, handle_call/3, 
          terminate/2, code_change/3]).
 
 -record(state, { id
@@ -32,10 +32,10 @@ delete(Pid, Key) ->
     gen_server:cast(Pid, {delete, Key}).
 
 change_next(Pid, Bound) ->
-    gen_server:cast(Pid, {change_next, Bound}).
+    gen_server:call(Pid, {change_next, Bound}).
 
 change_previous(Pid, Bound) ->
-    gen_server:cast(Pid, {change_previous, Bound}).
+    gen_server:call(Pid, {change_previous, Bound}).
 
 join(Pid, New_node) ->
     gen_server:cast(Pid, {join, New_node}).
@@ -78,9 +78,12 @@ handle_cast({query, Key}, S = #state{id=Id, prev={Prev, _} , data=Data}) ->
             end
     end,
     {noreply, S};
+
 handle_cast({join, {Node_id, Node_Pid, My_id}}, S = #state{id=My_id}) ->
+    io:format(standard_error, "Cycle over\n", []),
     {noreply, S};
-handle_cast({join, {Node_id, Node_Pid, Identif}}, S = #state{prev={Prev, _}}) ->
+handle_cast({join, {Node_id, Node_Pid, Identif}}, S = #state{prev={Prev, _}, next={Next, NextPid}}) ->
+    io:format(standard_error, " - Pid: ~w received message: ~w\n", [self(), {join, {Node_id, Node_Pid, Identif}}]),
     case Identif of
         undefined ->
             {ok, Pid} = start_link(Node_id),
@@ -91,19 +94,23 @@ handle_cast({join, {Node_id, Node_Pid, Identif}}, S = #state{prev={Prev, _}}) ->
     end,
     case check_bounds(Node_id, {Prev, S#state.id}) of
         true ->
+            io:format(standard_error, "yes!\n", []),
             State1 = new_state_from_join({Node_id, Pid}, S);
         _ ->
-            State1 = S
+            io:format(standard_error, "no!\n", []),
+            State1 = S,
+            join(NextPid, {Node_id, Pid, Identif1})
     end,
-    join(S#state.next, {Node_id, Pid, Identif1}),
-    {noreply, State1};
+    {noreply, State1}.
 
 
-handle_cast({change_next, {Node_id, Pid}}, S) ->    
-    {noreply, S#state{next={Node_id, Pid}}};
+handle_call({change_next, {Node_id, Pid}}, _From, S) -> 
+    io:format("Change next\n",[]),   
+    {reply, ok, S#state{next={Node_id, Pid}}};
 
-handle_cast({change_previous, {Node_id, Pid}}, S) ->    
-    {noreply, S#state{prev={Node_id, Pid}}}.
+handle_call({change_previous, {Node_id, Pid}}, _From, S) ->    
+    io:format("Change previous\n",[]),
+    {reply, ok, S#state{prev={Node_id, Pid}}}.
 
 
 handle_info(Msg, Cats) ->
@@ -121,8 +128,10 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Private functions
 check_bounds(Key, {Prev, Right}) ->
+    io:format(standard_error, "CHeck bounds: ~w\n", [{Key, {Prev, Right}}]),
     Left = (Prev + 1) rem ?MAX_KEY,
-    case Left < Right of
+    %% changed from Left < Right
+    case Left =< Right of
         true ->
             Key =< Right andalso Key >= Left;
         _ ->
@@ -130,14 +139,19 @@ check_bounds(Key, {Prev, Right}) ->
     end.
 
 
-new_state_from_join({Node_id, Pid},  S = #state{prev={Prev_id, Prev_pid}}) ->
-    New_prev = {Node_id, Pid},
+new_state_from_join({Node_id, Pid}, S = #state{prev={Prev_id, Prev_pid}}) ->
+    New = {Node_id, Pid},
     change_previous(Pid, {Prev_id, Prev_pid}),
     change_next(Pid, {S#state.id, self()}),
 
-    change_next(Prev_pid, New_prev),    
-    
-    S#state{prev=New_prev}.
+    case self() of
+        Prev_pid ->
+            New_next={Node_id, Pid};
+        _ ->
+            change_next(Prev_pid, New),
+            New_next=S#state.next   
+    end,
+    S#state{prev=New, next=New_next}.
 
 return_value(Value) ->
     io:format("~w\n", [Value]).

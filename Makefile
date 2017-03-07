@@ -19,4 +19,4 @@ dialyzer:
 	dialyzer --src -r .
 
 run:
-	/usr/lib/erlang/bin/erl -noshell -s test extreme_depart_test -s erlang halt
+	/usr/lib/erlang/bin/erl -noshell -s test c_insert_test -s erlang halt

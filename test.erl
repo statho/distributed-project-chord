@@ -3,23 +3,23 @@
 				  extreme_depart_test/0]).
 
 c_join_test() ->
-	{ok, Pid1} = node:c_start_link(1),
+	{ok, Pid1} = node:c_start_link(1, 10),
 	% io:format("Node 1 pid: ~w\n", [Pid1]),
 	% node:c_insert(Pid1, {1, atomo}),
 	% io:format("State 1: ~w\n", [sys:get_state(Pid1)]),
 	node:c_join(Pid1, 2),
-	{_, _, {_, Pid2}, _, _} = sys:get_state(Pid1),
+	{_, _, {_, Pid2}, _, _, _} = sys:get_state(Pid1),
 	% io:format("State 1: ~w\n", [sys:get_state(Pid1)]),
 	% io:format("State 2: ~w\n", [sys:get_state(Pid2)]),
-	node:c_join(Pid1, 4),
-	{_, _, {_, Pid4}, _, _} = sys:get_state(Pid1),
+	node:c_join(Pid1, 3),
+	{_, _, {_, Pid3}, _, _, _} = sys:get_state(Pid1),
 	% io:format("State 1: ~w\n", [sys:get_state(Pid1)]),
 	% io:format("State 2: ~w\n", [sys:get_state(Pid2)]),
 	% io:format("State 4: ~w\n", [sys:get_state(Pid4)]),
 
-	node:c_join(Pid1, 3),
+	node:c_join(Pid1, 4),
 	timer:sleep(500),
-	{_, _, {_, Pid3}, _, _} = sys:get_state(Pid4),
+	{_, _, {_, Pid4}, _, _, _} = sys:get_state(Pid1),
 	% io:format("State 1: ~w\n", [sys:get_state(Pid1)]),
 	% io:format("State 2: ~w\n", [sys:get_state(Pid2)]),
 	% io:format("State 3: ~w\n", [sys:get_state(Pid3)]),
@@ -53,16 +53,31 @@ c_insert_test() ->
 	{ok, [Pid1,Pid2, Pid3, Pid4]} = c_join_test(),
 	print_state([Pid1,Pid2, Pid3, Pid4]),
 
-	node:c_insert(Pid1, {1, ena}),
+	timer:sleep(500),
+	node:c_insert(Pid1, {4, ena}),
 	node:c_insert(Pid1, {2, dio}),
+	timer:sleep(1000),
+
+	node:c_query(Pid1, "*"),
+
+	timer:sleep(1000),
+
 	node:c_insert(Pid1, {3, tria}),
 	node:c_insert(Pid1, {4, tessera}),
 	node:c_insert(Pid1, {5, pente}),
 	node:c_insert(Pid1, {10, pente}),
-	print_state([Pid1,Pid2, Pid3, Pid4]),
+	% print_state([Pid1,Pid2, Pid3, Pid4]),
+	timer:sleep(500),
+
+	node:c_query(Pid1, "*"),
+
+	timer:sleep(500),
+
 
 	node:c_insert(Pid1, {1, miden}),
-	print_state([Pid1,Pid2, Pid3, Pid4]),
+	% print_state([Pid1,Pid2, Pid3, Pid4]),
+	node:c_query(Pid1, "*"),
+
 
 	node:c_query(Pid1, 1),
 	timer:sleep(500),
@@ -82,12 +97,12 @@ c_insert_test() ->
 
 
 	node:c_join(Pid1, 5),
-	{_, _, {_, Pid5}, _, _} = sys:get_state(Pid1),
-	print_state([Pid1,Pid2, Pid3, Pid4, Pid5]),
+	{_, _, {_, Pid5}, _, _, _} = sys:get_state(Pid1),
+	% print_state([Pid1,Pid2, Pid3, Pid4, Pid5]),
 
 	node:c_join(Pid1, 15),
-	{_, _, {_, Pid15}, _, _} = sys:get_state(Pid1),
-	print_state([Pid1,Pid2, Pid3, Pid4, Pid5, Pid15]),
+	{_, _, {_, Pid15}, _, _, _} = sys:get_state(Pid1),
+	% print_state([Pid1,Pid2, Pid3, Pid4, Pid5, Pid15]),
 
 	timer:sleep(500),
 
@@ -98,8 +113,8 @@ c_insert_test() ->
 	node:c_delete(Pid1, 4),
 	node:c_delete(Pid1, 5),
 
-	timer:sleep(500),
-	print_state([Pid1,Pid2, Pid3, Pid4, Pid5, Pid15]).
+	timer:sleep(500).
+	% print_state([Pid1,Pid2, Pid3, Pid4, Pid5, Pid15]).
 
 extreme_depart_test() ->
 		{ok, [Pid1,Pid2, Pid3, Pid4]} = c_join_test(),
@@ -139,11 +154,11 @@ extreme_depart_test() ->
 
 
 	node:c_join(Pid1, 5),
-	{_, _, {_, Pid5}, _, _} = sys:get_state(Pid1),
+	{_, _, {_, Pid5}, _, _, _} = sys:get_state(Pid1),
 	% print_state([Pid1,Pid2, Pid3, Pid4, Pid5]),
 
 	node:c_join(Pid1, 15),
-	{_, _, {_, Pid15}, _, _} = sys:get_state(Pid1),
+	{_, _, {_, Pid15}, _, _, _} = sys:get_state(Pid1),
 	% print_state([Pid1,Pid2, Pid3, Pid4, Pid5, Pid15]),
 
 	timer:sleep(500),

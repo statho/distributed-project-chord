@@ -1,7 +1,7 @@
--module(node).
+-module(node_no_repl).
 -behaviour(gen_server).
 
--export([c_start_link/2, c_insert/2, c_query/2, 
+-export([c_start_link/1, c_insert/2, c_query/2, 
          c_delete/2, change_previous/2, change_next/2,
          c_join/2, c_depart/2]).
 -export([init/1, handle_cast/2, handle_info/2, handle_call/3, 
@@ -11,7 +11,6 @@
                , prev
                , next
                , data = maps:new()
-               , k = 1
                }).
 
 -define(MAX_KEY, 13407807929942597099574024998205846127479365820592393377723561443721764030073546976801874298166903427690031858186486050853753882811946569946433649006084096).
@@ -19,14 +18,14 @@
 
 %%% Client API
 
-c_start_link(Id, K) ->
+c_start_link(Id) ->
     Hid = dis_lib:hash(Id),
-    start_link(Hid, K).
+    start_link(Hid).
 
 c_insert(Pid, {Key, Value}) ->
     Hkey = dis_lib:hash(Key),
     % io:format("Hashed key: ~p\n", [Hkey]),
-    insert(Pid, {Hkey, {Key,Value, 0}}).
+    insert(Pid, {Hkey, {Key,Value}}).
 
 %% This call is asynchronous
 c_query(Pid, "*") ->
@@ -52,12 +51,12 @@ c_depart(Pid, Node_id) ->
 %% -----------------------------------------------------
 
 
-start_link(Id, K) ->
-    gen_server:start_link(?MODULE, [Id, K], []).
+start_link(Id) ->
+    gen_server:start_link(?MODULE, [Id], []).
 
 %% This call is asynchronous
-insert(Pid, {Hkey, {Key, Value, Serial}}) ->
-    gen_server:cast(Pid, {insert, {Hkey, {Key, Value, Serial}}}).
+insert(Pid, {Hkey, {Key, Value}}) ->
+    gen_server:cast(Pid, {insert, {Hkey, {Key, Value}}}).
 
 %% This call is asynchronous
 query(Pid, Key) ->
@@ -82,35 +81,23 @@ join(Pid, New_node) ->
 depart(Pid, Node_id) ->
     gen_server:cast(Pid, {depart, Node_id}).
 
-spread(Pid, {Hkey, {Key, Value, Count}, Id}) ->
-    gen_server:cast(Pid, {spread, {Hkey, {Key, Value, Count}, Id}}).
+
+%% Synchronous call
+close_shop(Pid) ->
+    gen_server:call(Pid, terminate).
 
 %%% Server functions
-init([Id, K]) -> 
-    {ok, #state{id=Id, prev= {Id, self()}, next= {Id, self()}, k=K}}. 
+init([Id]) -> 
+    {ok, #state{id=Id, prev= {Id, self()}, next= {Id, self()}}}. 
 
-handle_cast({spread, {Hkey, {Key, Value, Count}, Id}}, S = #state{id=Id, prev={Prev, _}, data=Data, k=K}) when Count < K ->
-    {noreply, S};
-
-handle_cast({spread, {Hkey, {Key, Value, Count}, First_id}}, S = #state{id=Id, prev={Prev, _}, data=Data, k=K}) when Count < K ->
-    {_, Next_pid} = S#state.next,
-    Data1 = maps:put(Hkey, {Key, Value, Count}, Data),
-    spread(Next_pid, {Hkey, {Key, Value, Count + 1}, First_id}),
-    {noreply, S#state{data=Data1}};
-
-handle_cast({spread, {Hkey, {Key, Value, Count}, _Id}}, S = #state{id=Id, prev={Prev, _}, data=Data, k=K}) ->
-    {noreply, S};
-
-
-handle_cast({insert, {Hkey, {Key, Value, 0}}}, S = #state{id=Id, prev={Prev, _}, data=Data}) ->
-    {_, Next_pid} = S#state.next,
+handle_cast({insert, {Hkey, {Key, Value}}}, S = #state{id=Id, prev={Prev, _}, data=Data}) ->
     case check_bounds(Hkey, {Prev, S#state.id}) of
         true ->
-            Data1 = maps:put(Hkey, {Key, Value, 0}, Data),
-            spread(Next_pid, {Hkey, {Key, Value, 1}, Id}),
+            Data1 = maps:put(Hkey, {Key, Value}, Data),
             {noreply, S#state{data=Data1}};
         _ ->
-            insert(Next_pid, {Hkey, {Key, Value, 0}}),
+            {_, Next_pid} = S#state.next,
+            insert(Next_pid, {Hkey, {Key, Value}}),
             {noreply, S}
     end;
 
@@ -154,11 +141,11 @@ handle_cast({delete, Key}, S = #state{id=Id, prev={Prev, _} , data=Data}) ->
 handle_cast({join, {Node_id, Node_Pid, My_id}}, S = #state{id=My_id}) ->
     % io:format(standard_error, "Cycle over\n", []),
     {noreply, S};
-handle_cast({join, {Node_id, Node_Pid, Identif}}, S = #state{prev={Prev, _}, next={Next, NextPid}, k=K}) ->
+handle_cast({join, {Node_id, Node_Pid, Identif}}, S = #state{prev={Prev, _}, next={Next, NextPid}}) ->
     % io:format(standard_error, " - Pid: ~w received message: ~w\n", [self(), {join, {Node_id, Node_Pid, Identif}}]),
     case Identif of
         undefined ->
-            {ok, Pid} = start_link(Node_id,K),
+            {ok, Pid} = start_link(Node_id),
             Identif1 = S#state.id;
         _ ->
             Pid = Node_Pid,
@@ -270,7 +257,7 @@ get_from_data(Key, Data) ->
     case maps:get(Key, Data, not_found) of
         not_found ->
             not_found;
-        {_Key, Val, _Count} ->
+        {_, Val} ->
             Val
     end.
 

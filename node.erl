@@ -82,23 +82,65 @@ join(Pid, New_node) ->
 depart(Pid, Node_id) ->
     gen_server:cast(Pid, {depart, Node_id}).
 
-spread(Pid, {Hkey, {Key, Value, Count}, Id}) ->
-    gen_server:cast(Pid, {spread, {Hkey, {Key, Value, Count}, Id}}).
+spread(Pid, {Hkey, {Val, Count}, Id}) ->
+    gen_server:cast(Pid, {spread, {Hkey, {Val, Count}, Id}}).
+
+spread_increase(Pid, {New_data, Id}) ->
+    gen_server:cast(Pid, {spread_increase, {New_data, Id}}).    
 
 %%% Server functions
 init([Id, K]) -> 
     {ok, #state{id=Id, prev= {Id, self()}, next= {Id, self()}, k=K}}. 
 
-handle_cast({spread, {Hkey, {Key, Value, Count}, Id}}, S = #state{id=Id, prev={Prev, _}, data=Data, k=K}) when Count < K ->
+
+handle_cast({spread_increase, {New_data, Id}}, S = #state{id=Id, prev={_Prev, _}, data=Old_data, k=K}) ->
     {noreply, S};
 
-handle_cast({spread, {Hkey, {Key, Value, Count}, First_id}}, S = #state{id=Id, prev={Prev, _}, data=Data, k=K}) when Count < K ->
+handle_cast({spread_increase, {New_data, First_id}}, S = #state{id=Id, prev={_Prev, _}, data=Old_data, k=Replication}) ->
     {_, Next_pid} = S#state.next,
-    Data1 = maps:put(Hkey, {Key, Value, Count}, Data),
-    spread(Next_pid, {Hkey, {Key, Value, Count + 1}, First_id}),
+    My_zeroes = maps:filter(fun(Hkey, {_,_,C}) -> C == 0 end, Old_data),
+    My_zeroes_keys = maps:keys(My_zeroes),
+
+    New_data1 = maps:without(My_zeroes_keys, New_data),
+    
+    Data1 = maps:map(
+        fun(Hkey, {K, V, Count}) ->
+            {K, V, Count+1}
+        end, New_data1),
+
+    Data2 = maps:merge(Old_data, Data1),
+
+    Data3 = maps:filter(
+        fun(Hkey, {K, V, Count}) ->
+            Count < Replication
+        end, Data2),
+    To_send = increase_counters(New_data1, Replication),
+    case maps:size(To_send) of
+        0 -> 
+            {noreply, S#state{data=Data3}};
+        _ -> 
+            spread_increase(Next_pid, To_send),
+            {noreply, S#state{data=Data3}}
+    end;
+
+
+
+handle_cast({spread, {Hkey, {_Val, Count}, Id}}, S = #state{id=Id, prev={_Prev, _}, data=_Data, k=K}) when Count < K ->
+    {noreply, S};
+
+handle_cast({spread, {Hkey, {delete, Count}, First_id}}, S = #state{id=Id, prev={Prev, _}, data=Data, k=K}) when Count < K ->
+    {_, Next_pid} = S#state.next,
+    Data1 = delete_from_data(Hkey, Data),
+    spread(Next_pid, {Hkey, {delete, Count + 1}, First_id}),
     {noreply, S#state{data=Data1}};
 
-handle_cast({spread, {Hkey, {Key, Value, Count}, _Id}}, S = #state{id=Id, prev={Prev, _}, data=Data, k=K}) ->
+handle_cast({spread, {Hkey, {{Key, Value}, Count}, First_id}}, S = #state{id=Id, prev={Prev, _}, data=Data, k=K}) when Count < K ->
+    {_, Next_pid} = S#state.next,
+    Data1 = maps:put(Hkey, {Key, Value, Count}, Data),
+    spread(Next_pid, {Hkey, {{Key, Value}, Count + 1}, First_id}),
+    {noreply, S#state{data=Data1}};
+
+handle_cast({spread, {Hkey, {_Val, Count}, _Id}}, S = #state{id=Id, prev={Prev, _}, data=Data, k=K}) when Count >= K ->
     {noreply, S};
 
 
@@ -107,7 +149,7 @@ handle_cast({insert, {Hkey, {Key, Value, 0}}}, S = #state{id=Id, prev={Prev, _},
     case check_bounds(Hkey, {Prev, S#state.id}) of
         true ->
             Data1 = maps:put(Hkey, {Key, Value, 0}, Data),
-            spread(Next_pid, {Hkey, {Key, Value, 1}, Id}),
+            spread(Next_pid, {Hkey, {{Key, Value}, 1}, Id}),
             {noreply, S#state{data=Data1}};
         _ ->
             insert(Next_pid, {Hkey, {Key, Value, 0}}),
@@ -141,11 +183,12 @@ handle_cast({query, {Key, First_id}}, S = #state{id=Id, prev={Prev, _} , data=Da
     {noreply, S};
 
 handle_cast({delete, Key}, S = #state{id=Id, prev={Prev, _} , data=Data}) ->
+    {_, Next_pid} = S#state.next,
     case check_bounds(Key, {Prev, S#state.id}) of
         true ->
-            Data1 = delete_from_data(Key, Data);
+            Data1 = delete_from_data(Key, Data),
+            spread(Next_pid, {Key, {delete, 1}, Id});
         _ ->
-            {_, Next_pid} = S#state.next,
             delete(Next_pid, Key),
             Data1 = Data
     end,
@@ -231,17 +274,23 @@ check_bounds(Key, {Prev, Right}) ->
     end.
 
 
-new_state_from_join({Node_id, Pid}, S = #state{prev={Prev_id, Prev_pid}}) ->
+new_state_from_join({Node_id, Pid}, S = #state{id=My_id, prev={Prev_id, Prev_pid}, next={Next_id, Next_pid}, k=K}) ->
     New = {Node_id, Pid},
     change_previous(Pid, {Prev_id, Prev_pid}),
     change_next(Pid, {S#state.id, self()}),
 
     Data = S#state.data,
-    Keys = find_keys_in_range({Prev_id, Node_id}, Data),
+    My_new_zero_keys = find_keys_in_range({Node_id, My_id}, Data),
     
-    To_transfer = maps:with(Keys, Data),
-    To_keep = maps:without(Keys, Data),
+    To_keep = maps:with(My_new_zero_keys, Data),
+    To_transfer = maps:without(My_new_zero_keys, Data),
     add_key_values(Pid, To_transfer),
+
+    %% Increase counters for all our other keys
+    New_to_transfer = increase_counters(To_transfer, K),
+
+    %% Send increase counter to the next
+    spread_increase(Next_pid, {New_to_transfer, My_id}),
 
     case self() of
         Prev_pid ->
@@ -250,7 +299,7 @@ new_state_from_join({Node_id, Pid}, S = #state{prev={Prev_id, Prev_pid}}) ->
             change_next(Prev_pid, New),
             New_next=S#state.next   
     end,
-    S#state{prev=New, next=New_next, data=To_keep}.
+    S#state{prev=New, next=New_next, data=maps:merge(To_keep, New_to_transfer)}.
 
 find_keys_in_range({Start, End}, Data) ->
     Filtered = maps:filter(
@@ -258,6 +307,16 @@ find_keys_in_range({Start, End}, Data) ->
             check_bounds(Key, {Start, End})
         end, Data),
     Keys = maps:keys(Filtered).
+
+increase_counters(Data, Replication) ->
+    Data1 = maps:map(
+        fun(Hkey, {K, V, Count}) ->
+            {K, V, Count+1}
+        end, Data),
+    Data2 = maps:filter(
+        fun(Hkey, {K, V, Count}) ->
+            Count < Replication
+        end, Data1).
 
 return_value(Value) ->
     io:format("~w\n", [Value]).

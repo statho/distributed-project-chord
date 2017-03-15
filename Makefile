@@ -22,4 +22,4 @@ run:
 	/usr/lib/erlang/bin/erl -noshell -s test extreme_depart_test -s erlang halt
 
 testcase1:
-	/usr/lib/erlang/bin/erl -noshell -s testcase1 main eventual 3 -s erlang halt		
+	/usr/lib/erlang/bin/erl -noshell -s testcase1 main3 eventual 3 -s erlang halt		

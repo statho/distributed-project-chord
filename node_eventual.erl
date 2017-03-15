@@ -1,4 +1,4 @@
--module(node).
+-module(node_eventual).
 -behaviour(gen_server).
 
 -export([c_start_link/2, c_insert/2, c_query/2, 

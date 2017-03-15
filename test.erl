@@ -184,7 +184,7 @@ c_insert_test() ->
 	% print_state([Pid1,Pid2, Pid3, Pid4, Pid5, Pid15]).
 
 extreme_depart_test() ->
-		{ok, [Pid1,_, _, _]} = c_join_test(),
+	{ok, [Pid1,_, _, _]} = c_join_test(),
 	% print_state([Pid1,Pid2, Pid3, Pid4]),
 
 	node:c_insert(Pid1, {1, ena}),

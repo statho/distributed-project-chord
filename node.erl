@@ -222,10 +222,10 @@ handle_cast({query, {Hkey, First_id, found}}, S = #state{id=Id, prev={Prev, Prev
     {_, Next_pid} = S#state.next,
     case maps:is_key(Hkey, Data) of
         true ->
-            {_Key, Val, Cnt} = get_from_data(Hkey, Data),
+            {Key, Val, Cnt} = get_from_data(Hkey, Data),
             case Cnt == K-1 of
                 true ->
-                    return_value(Val);
+                    return_value({query, {Key, Val}});
                 _ ->
                     query(Next_pid, {Hkey, First_id, found})                        
             end;
@@ -413,14 +413,15 @@ increase_counters(Data, Replication) ->
         end, Data1).
 
 return_value(Value) ->
-    io:format("~w\n", [Value]).
+    master ! Value.
+    %%io:format("~w\n", [Value]).
 
 delete_from_data(Key, Data) ->
     maps:remove(Key, Data).
 
-get_from_data(Key, Data) ->
+get_from_data(Hkey, Data) ->
     % io:format("Key: ~p\n Data: ~p\n", [Key, Data]),
-    case maps:get(Key, Data, not_found) of
+    case maps:get(Hkey, Data, not_found) of
         not_found ->
             not_found;
         {Key, Val, Count} ->

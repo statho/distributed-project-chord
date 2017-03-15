@@ -188,7 +188,7 @@ handle_cast({insert, {Hkey, {Key, Value, 0}}}, S = #state{id=Id, prev={Prev, _},
         true ->
             Data1 = maps:put(Hkey, {Key, Value, 0}, Data),
             spread(Next_pid, {Hkey, {{Key, Value}, 1}, Id}),
-            return_value({Key, Value}),
+            return_value({insert, {Key, Value}}),
             {noreply, S#state{data=Data1}};
         _ ->
             insert(Next_pid, {Hkey, {Key, Value, 0}}),
@@ -197,26 +197,34 @@ handle_cast({insert, {Hkey, {Key, Value, 0}}}, S = #state{id=Id, prev={Prev, _},
 
 handle_cast({query, {"*", Id}}, S = #state{id=Id, prev={Prev, _} , data=Data}) ->
     {noreply, S};
-handle_cast({query, {Key, First_id}}, S = #state{id=Id, prev={Prev, _} , data=Data}) ->
-    case Key of
+handle_cast({query, {Hkey, First_id}}, S = #state{id=Id, prev={Prev, _} , data=Data}) ->
+    case Hkey of
         "*" ->
             Value = maps:values(Data),
             return_value(Value),
             {_, Next_pid} = S#state.next,
             case First_id of
                 undefined ->
-                    query(Next_pid, {Key, Id});
+                    query(Next_pid, {Hkey, Id});
                 _ ->
-                    query(Next_pid, {Key, First_id})
+                    query(Next_pid, {Hkey, First_id})
             end;
         _ ->
-            case check_bounds(Key, {Prev, S#state.id}) of
+            % case check_bounds(Key, {Prev, S#state.id}) of
+            %     true ->
+            %         Value = get_from_data(Key, Data),
+            %         return_value(Value);
+            %     _ ->
+            %         {_, Next_pid} = S#state.next,
+            %         query(Next_pid, {Key, First_id})
+            % end
+            {_, Next_pid} = S#state.next,
+            case maps:is_key(Hkey, Data) of
                 true ->
-                    Value = get_from_data(Key, Data),
-                    return_value(Value);
+                    {Key, Val, Cnt} = get_from_data(Hkey, Data),
+                    return_value({query, {Key, Val}});
                 _ ->
-                    {_, Next_pid} = S#state.next,
-                    query(Next_pid, {Key, First_id})
+                    query(Next_pid, {Hkey, First_id})
             end
     end,
     {noreply, S};
@@ -249,7 +257,8 @@ handle_cast({join, {Node_id, Node_Pid, Identif}}, S = #state{prev={Prev, _}, nex
     case check_bounds(Node_id, {Prev, S#state.id}) of
         true ->
             % io:format(standard_error, "yes!\n", []),
-            State1 = new_state_from_join({Node_id, Pid}, S);
+            State1 = new_state_from_join({Node_id, Pid}, S),
+            return_value({join, {Node_id, Pid}});
         _ ->
             % io:format(standard_error, "no!\n", []),
             State1 = S,
@@ -359,18 +368,19 @@ increase_counters(Data, Replication) ->
         end, Data1).
 
 return_value(Value) ->
-    io:format("~w\n", [Value]).
+    master ! Value.
+    % io:format("~w\n", [Value]).
 
 delete_from_data(Key, Data) ->
     maps:remove(Key, Data).
 
-get_from_data(Key, Data) ->
+get_from_data(Hkey, Data) ->
     % io:format("Key: ~p\n Data: ~p\n", [Key, Data]),
-    case maps:get(Key, Data, not_found) of
+    case maps:get(Hkey, Data, not_found) of
         not_found ->
             not_found;
-        {_Key, Val, _Count} ->
-            Val
+        {Key, Val, Count} ->
+            {Key, Val, Count}
     end.
 
 fst({X,_}) -> X.

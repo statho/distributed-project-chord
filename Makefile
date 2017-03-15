@@ -20,3 +20,6 @@ dialyzer:
 
 run:
 	/usr/lib/erlang/bin/erl -noshell -s test extreme_depart_test -s erlang halt
+
+testcase1:
+	/usr/lib/erlang/bin/erl -noshell -s testcase1 main -s erlang halt		

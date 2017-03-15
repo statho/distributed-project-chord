@@ -18,8 +18,8 @@ main([Type, Repl]) ->
 	%% Sanity check
 	% io:format("~p~n", [Key_vals]),
 
-	Pid1 = join_n(K, 10, Module),
-	Pids = get_pids(10),
+	Pids = join_n(K, 10, Module),
+	[Pid1|_] = Pids,
 
 	Random_pids = give_random_elements(500, [], Pids),
 
@@ -95,8 +95,8 @@ main3([Type, Repl]) ->
 	%% Sanity check
 	% io:format("~p~n", [Key_vals]),
 
-	Pid1 = join_n(K, 10, Module),
-	Pids = get_pids(10),
+	Pids = join_n(K, 10, Module),
+	[Pid1|_] = Pids,
 
 	Random_pids = give_random_elements(500, [], Pids),
 
@@ -217,14 +217,20 @@ get_all_lines(Device) ->
 
 join_n(K, N, Module) ->
 	{ok, Pid1} = Module:c_start_link(1, K),
-	join(Pid1, K, N+1, Module),
-	Pid1.
+	[Pid1] ++ join(Pid1, K, N+1, Module).
 
 join(_Pid1, _K, 1, _Module) ->
-	ok;
+	[];
 join(Pid1, K, N, Module) ->
-	timer:sleep(500),
 	Module:c_join(Pid1, N),
-	join(Pid1, K, N-1, Module).
+	receive
+		{join, {_Node_id, Pid}} ->
+			[Pid] ++ join(Pid1, K, N-1, Module)
+	after 
+		5000 ->
+			io:format("Kouradeiros\n", []),
+			error
+	end.
+	
 
 

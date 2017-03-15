@@ -1,9 +1,9 @@
 -module(test).
 -export ([c_join_test/0, c_depart_test/0, c_insert_test/0,
-				  extreme_depart_test/0]).
+				  extreme_depart_test/0, c_join_after_one_node/0]).
 
 c_join_test() ->
-	{ok, Pid1} = node:c_start_link(1, 10),
+	{ok, Pid1} = node:c_start_link(1, 3),
 	% io:format("Node 1 pid: ~w\n", [Pid1]),
 	% node:c_insert(Pid1, {1, atomo}),
 	% io:format("State 1: ~w\n", [sys:get_state(Pid1)]),
@@ -28,6 +28,34 @@ c_join_test() ->
 	% io:format("State 3: ~w\n", [sys:get_state(Pid3)]),
 	% io:format("State 4: ~w\n", [sys:get_state(Pid4)]),
 	{ok, [Pid1,Pid2, Pid3, Pid4]}.
+
+
+c_join_after_one_node() ->
+	{ok, Pid1} = node:c_start_link(1, 10),
+	node:c_insert(Pid1, {3, tria}),
+	node:c_insert(Pid1, {4, tessera}),
+	node:c_insert(Pid1, {5, pente}),
+	node:c_insert(Pid1, {10, pente}),
+	node:c_insert(Pid1, {11, pente}),
+	node:c_insert(Pid1, {12, pente}),
+	node:c_insert(Pid1, {13, pente}),
+	node:c_insert(Pid1, {14, pente}),
+	node:c_insert(Pid1, {15, pente}),
+	node:c_insert(Pid1, {16, pente}),
+	node:c_insert(Pid1, {17, pente}),
+	node:c_insert(Pid1, {18, pente}),
+	node:c_insert(Pid1, {19, pente}),
+	node:c_insert(Pid1, {500, pente}),
+
+	timer:sleep(1000),
+	node:c_query(Pid1, "*"),
+	io:format("~n", []),
+	timer:sleep(500),
+	node:c_join(Pid1, 500),
+	timer:sleep(500),
+	node:c_query(Pid1, "*"),
+	io:format("~n", []),
+	timer:sleep(500).
 
 
 
@@ -94,14 +122,15 @@ c_insert_test() ->
 	node:c_query(Pid1, 1),
 	timer:sleep(500),
 	% node:c_query(Pid1, 2),
-	timer:sleep(500),
+	% timer:sleep(500),
 	% node:c_query(Pid1, 3),
-	timer:sleep(500),
+	% timer:sleep(500),
 	% node:c_query(Pid1, 4),
-	timer:sleep(500),
+	% timer:sleep(500),
 	% node:c_query(Pid1, 5),
 	
 	node:c_query(Pid1, "*"),
+	io:format("~n", []),
 
 	% node:c_query(Pid1, 6),
 
@@ -114,41 +143,48 @@ c_insert_test() ->
 
 	timer:sleep(500),
 	node:c_query(Pid1, "*"),
+	io:format("~n", []),
 	timer:sleep(500),
 
 	node:c_join(Pid1, 15),
 	% {_, _, {_, Pid15}, _, _, _} = sys:get_state(Pid1),
 	% print_state([Pid1,Pid2, Pid3, Pid4, Pid5, Pid15]),
-	timer:sleep(500),
+	timer:sleep(1000),
 	node:c_query(Pid1, "*"),
+	io:format("~n", []),
 	timer:sleep(500),
 
 
 	node:c_delete(Pid1, 1),
 	timer:sleep(500),
 	node:c_query(Pid1, "*"),
+	io:format("~n", []),
 	timer:sleep(500),
 	node:c_delete(Pid1, 2),
 	timer:sleep(500),
 	node:c_query(Pid1, "*"),
+	io:format("~n", []),
 	timer:sleep(500),
 	node:c_delete(Pid1, 3),
 	timer:sleep(500),
 	node:c_query(Pid1, "*"),
+	io:format("~n", []),
 	timer:sleep(500),
 	node:c_delete(Pid1, 4),
 	timer:sleep(500),
 	node:c_query(Pid1, "*"),
+	io:format("~n", []),
 	timer:sleep(500),
 	node:c_delete(Pid1, 5),
 
 	timer:sleep(500),
 	node:c_query(Pid1, "*"),
+	io:format("~n", []),
 	timer:sleep(1000).
 	% print_state([Pid1,Pid2, Pid3, Pid4, Pid5, Pid15]).
 
 extreme_depart_test() ->
-		{ok, [Pid1,Pid2, Pid3, Pid4]} = c_join_test(),
+		{ok, [Pid1,_, _, _]} = c_join_test(),
 	% print_state([Pid1,Pid2, Pid3, Pid4]),
 
 	node:c_insert(Pid1, {1, ena}),
@@ -158,53 +194,39 @@ extreme_depart_test() ->
 	node:c_insert(Pid1, {5, pente}),
 	node:c_insert(Pid1, {10, deka}),
 	% print_state([Pid1,Pid2, Pid3, Pid4]),
-	timer:sleep(500),
+	sleep_query(Pid1),
 
 	node:c_insert(Pid1, {1, miden}),
 	% print_state([Pid1,Pid2, Pid3, Pid4]),
-	timer:sleep(500),
-
-	node:c_query(Pid1, 1),
-	timer:sleep(500),
-	node:c_query(Pid1, 2),
-	timer:sleep(500),
-	node:c_query(Pid1, 3),
-	timer:sleep(500),
-	node:c_query(Pid1, 4),
-	timer:sleep(500),
-	node:c_query(Pid1, 5),
-	timer:sleep(500),
-
-	
-	node:c_query(Pid1, "*"),
-	timer:sleep(500),
-
-	node:c_query(Pid1, 6),
-
-	timer:sleep(500),
-
+	sleep_query(Pid1),
 
 	node:c_join(Pid1, 5),
-	{_, _, {_, Pid5}, _, _, _} = sys:get_state(Pid1),
+	% {_, _, {_, Pid5}, _, _, _} = sys:get_state(Pid1),
 	% print_state([Pid1,Pid2, Pid3, Pid4, Pid5]),
+	sleep_query(Pid1),
+	
 
 	node:c_join(Pid1, 15),
-	{_, _, {_, Pid15}, _, _, _} = sys:get_state(Pid1),
+	% {_, _, {_, Pid15}, _, _, _} = sys:get_state(Pid1),
 	% print_state([Pid1,Pid2, Pid3, Pid4, Pid5, Pid15]),
+
+	sleep_query(Pid1),
+	
 
 	timer:sleep(500),
 
 	node:c_depart(Pid1, 3),
-	timer:sleep(500),
+	sleep_query(Pid1),
+
 	node:c_depart(Pid1, 15),
-	timer:sleep(500),
+	sleep_query(Pid1),
 	node:c_depart(Pid1, 2),
-	timer:sleep(500),
+	sleep_query(Pid1),
 	node:c_depart(Pid1, 4),
-	timer:sleep(500),
+	sleep_query(Pid1),
 
 	node:c_depart(Pid1, 5),
-	timer:sleep(500),
+	sleep_query(Pid1),
 
 	% print_state([Pid1]),
 
@@ -224,3 +246,8 @@ print_state([P1|Ps]) ->
 	end,
 	print_state(Ps).
 
+sleep_query(Pid1) ->
+	timer:sleep(500),
+	node:c_query(Pid1, "*"),
+	io:format("~n", []),
+	timer:sleep(500).

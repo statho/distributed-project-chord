@@ -88,10 +88,48 @@ spread(Pid, {Hkey, {Val, Count}, Id}) ->
 spread_increase(Pid, {New_data, Id}) ->
     gen_server:cast(Pid, {spread_increase, {New_data, Id}}).    
 
+spread_zeros(Pid, {Zero_keys, Id}) ->
+    gen_server:cast(Pid, {spread_zeros, {Zero_keys, Id}}).        
+
+spread_decrease(Pid, {New_data, Id}) ->
+    gen_server:cast(Pid, {spread_decrease, {New_data, Id}}).    
+
 %%% Server functions
 init([Id, K]) -> 
     {ok, #state{id=Id, prev= {Id, self()}, next= {Id, self()}, k=K}}. 
 
+handle_cast({spread_decrease, {New_data, Id}}, S = #state{id=Id, prev={_Prev, _}, data=Data, k=K}) ->
+    {noreply, S};
+
+handle_cast({spread_decrease, {New_data, First_id}}, S = #state{id=Id, prev={_Prev, _}, data=Old_data, k=K}) ->
+    {_, Next_pid} = S#state.next,
+    My_zeroes = maps:filter(fun(Hkey, {_,_,C}) -> C == 0 end, Old_data),
+    My_zeroes_keys = maps:keys(My_zeroes),
+
+    New_data_without_my_zeros = maps:without(My_zeroes_keys, New_data),
+    My_new_data = maps:merge(Old_data, New_data_without_my_zeros),
+
+    To_transfer = increase_counters(New_data_without_my_zeros, K),
+
+    case maps:size(To_transfer) of
+        0 -> 
+            {noreply, S#state{data=My_new_data}};
+        _ -> 
+            case First_id of
+                undefined  ->
+                    spread_decrease(Next_pid, {To_transfer, Id});
+                _ ->
+                    spread_decrease(Next_pid, {To_transfer, First_id})
+            end,
+            {noreply, S#state{data=My_new_data}}
+    end;
+
+
+handle_cast({spread_zeros, {Zero_keys, First_id}}, S = #state{id=Id, prev={_Prev, _}, data=Data, k=K}) ->
+    {_, Next_pid} = S#state.next,
+    Values_to_spread = maps:with(Zero_keys, Data),
+    spread_increase(Next_pid, {Values_to_spread, First_id}),
+    {noreply, S};
 
 handle_cast({spread_increase, {New_data, Id}}, S = #state{id=Id, prev={_Prev, _}, data=Old_data, k=K}) ->
     {noreply, S};
@@ -119,7 +157,7 @@ handle_cast({spread_increase, {New_data, First_id}}, S = #state{id=Id, prev={_Pr
         0 -> 
             {noreply, S#state{data=Data3}};
         _ -> 
-            spread_increase(Next_pid, To_send),
+            spread_increase(Next_pid, {To_send, Id}),
             {noreply, S#state{data=Data3}}
     end;
 
@@ -218,7 +256,7 @@ handle_cast({join, {Node_id, Node_Pid, Identif}}, S = #state{prev={Prev, _}, nex
     end,
     {noreply, State1};
 
-handle_cast({depart, My_id}, S = #state{id=My_id, prev={Prev_id, Prev_pid}, next={Next_id, Next_pid}}) ->
+handle_cast({depart, {My_id, _, _}}, S = #state{id=My_id, prev={Prev_id, Prev_pid}, next={Next_id, Next_pid}}) ->
     case Next_id of
         My_id ->
             {stop, normal, S};
@@ -226,11 +264,11 @@ handle_cast({depart, My_id}, S = #state{id=My_id, prev={Prev_id, Prev_pid}, next
             change_previous(Next_pid, {Prev_id, Prev_pid}),
             change_next(Prev_pid, {Next_id, Next_pid}),
 
-            add_key_values(Next_pid, S#state.data),
+            spread_decrease(Next_pid, {S#state.data, undefined}),
             {stop, normal, S}
     end;
-handle_cast({depart, Node_id}, S = #state{next={_, Next_pid}}) ->
-    depart(Next_pid, Node_id),
+handle_cast({depart, {Node_id, X, Y}}, S = #state{next={_, Next_pid}}) ->
+    depart(Next_pid, {Node_id, X, Y}),
     {noreply, S}.
 
 
@@ -251,8 +289,8 @@ handle_info(Msg, Cats) ->
     io:format("Unexpected message: ~p~n",[Msg]),
     {noreply, Cats}.
 
-terminate(normal, S = #state{id=My_id}) ->
-    io:format("Node ~w departed :'(\n", [My_id]),
+terminate(normal, S = #state{id=_My_id}) ->
+    io:format("Node ~w departed :'(\n", [self()]),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -299,6 +337,7 @@ new_state_from_join({Node_id, Pid}, S = #state{id=My_id, prev={Prev_id, Prev_pid
             change_next(Prev_pid, New),
             New_next=S#state.next   
     end,
+    spread_zeros(Prev_pid, {My_new_zero_keys, My_id}),
     S#state{prev=New, next=New_next, data=maps:merge(To_keep, New_to_transfer)}.
 
 find_keys_in_range({Start, End}, Data) ->

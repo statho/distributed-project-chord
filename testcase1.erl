@@ -116,12 +116,13 @@ main3([Type, Repl]) ->
     end,
     Key_vals_pids),
     
-	receive_loop2(500),
+	Sum = receive_loop2(500,0),
 	T2 = erlang:timestamp(),
 
 	T10 = timer:now_diff(T1, T0),
 	Diff = timer:now_diff(T2, T1),
-    io:format("Ok 500 requests in ~p, ~p\n",[Diff, T10]).
+    io:format("Ok 500 requests in ~p, ~p\n",[Diff, T10]),
+    io:format("Freshness of values ~p\n",[Sum]).
 
 read_requests(Filename) ->
 	Lines = readlines(Filename),
@@ -179,15 +180,21 @@ receive_loop(Cnt, Msg) ->
 			error
 	end.
 
-receive_loop2(0) ->
-	ok;
-receive_loop2(Cnt) ->
+receive_loop2(0,Accu) ->
+	Accu;
+receive_loop2(Cnt,Accu) ->
 	receive
 		{Command, {Key, Val}} ->
-			io:format("~p result: (~p, ~p)~n", [Command, Key, Val]),
-			receive_loop2(Cnt-1);
+			case Command of
+				query ->
+					%%io:format("~p result: (~p, ~p)~n", [Command, Key, string:strip(Val)]),
+					{X,[]} = string:to_integer(string:strip(Val)),
+					receive_loop2(Cnt-1,Accu+X);
+				insert ->
+					receive_loop2(Cnt-1,Accu)
+			end;
 		Whatever ->
-			receive_loop2(Cnt)
+			receive_loop2(Cnt,Accu)
 	after 
 		5000 ->
 			io:format("Kouradeiros\n", []),

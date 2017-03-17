@@ -116,7 +116,7 @@ main3([Type, Repl]) ->
     end,
     Key_vals_pids),
     
-    Sum = receive_loop2(500,0),
+    Sum = receive_loop2(500,0,#{}),
 	T2 = erlang:timestamp(),
 
 	T10 = timer:now_diff(T1, T0),
@@ -181,21 +181,25 @@ receive_loop(Cnt, Msg) ->
 			error
 	end.
 
-receive_loop2(0,Accu) ->
+receive_loop2(0,Accu,M) ->
 	Accu;
-receive_loop2(Cnt,Accu) ->
+receive_loop2(Cnt,Accu,M) ->
 	receive
 		{Command, {Key, Val}} ->
 			case Command of
 				query ->
 					%%io:format("~p result: (~p, ~p)~n", [Command, Key, string:strip(Val)]),
 					{X,[]} = string:to_integer(string:strip(Val)),
-					receive_loop2(Cnt-1,Accu+X);
+					Prev = maps:get(Key,M,X), %X is the default value if not exists
+					Dif = abs(X-Prev),
+					receive_loop2(Cnt-1,Accu+Dif,M);
 				insert ->
-					receive_loop2(Cnt-1,Accu)
+					{X,[]} = string:to_integer(string:strip(Val)),
+					M2 = maps:put(Key, X, M),
+					receive_loop2(Cnt-1,Accu,M2)
 			end;
 		Whatever ->
-			receive_loop2(Cnt,Accu)
+			receive_loop2(Cnt,Accu,M)
 	after 
 		5000 ->
 			io:format("Kouradeiros\n", []),

@@ -4,7 +4,7 @@ This is the final project for the Distributed Systems Course, in National Techni
 
 It is a simplified implementation of the Chord protocol. Detailed specification can be found at the "distrib-2016-2017-assignment.pdf"
 
-## Authors
+## Contributors
 - Georgiadis Panos
 - Kallas Konstantinos
 - Stathopoulos Anastasios

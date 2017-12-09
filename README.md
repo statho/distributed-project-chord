@@ -22,7 +22,7 @@ make
 Run 
 
 ```shell
-./run_test1.sh
+./run_test1_2.sh
 ```
 
 ## To run testcase 3 
